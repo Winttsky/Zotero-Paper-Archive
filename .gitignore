@@ -1,0 +1,11 @@
+﻿node_modules/
+dist/
+.env
+*.log
+data/papers/*
+!data/papers/.gitkeep
+data/notes/*
+!data/notes/.gitkeep
+data/metadata/items/*
+!data/metadata/items/.gitkeep
+data/metadata/archive-log.jsonl

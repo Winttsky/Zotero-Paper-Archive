@@ -1,0 +1,16 @@
+{
+  "name": "zotero-paper-archive",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "pnpm --parallel --filter @zpa/server --filter @zpa/client dev",
+    "dev:server": "pnpm --filter @zpa/server dev",
+    "dev:client": "pnpm --filter @zpa/client dev",
+    "build": "pnpm --filter @zpa/client build",
+    "start": "pnpm --filter @zpa/server start"
+  },
+  "packageManager": "pnpm@11.7.0",
+  "devDependencies": {}
+}
+
