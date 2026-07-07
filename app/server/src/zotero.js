@@ -71,21 +71,41 @@ export async function getDomainCollections() {
   };
 }
 
+function collectionSummary(collection) {
+  return {
+    key: collection.key,
+    name: collection.name || collection.data?.name || "",
+    version: collection.version
+  };
+}
+
+export async function getCollectionPapers(collection) {
+  if (!collection?.key) {
+    return { collection: null, papers: [] };
+  }
+
+  const items = await zoteroFetch(
+    `/collections/${collection.key}/items/top?include=data&limit=100&sort=dateAdded&direction=desc`
+  );
+
+  return {
+    collection: collectionSummary(collection),
+    papers: items
+      .filter((item) => item.data?.itemType !== "attachment")
+      .map(itemToPaper)
+  };
+}
+
 export async function getInboxPapers() {
   const inbox = await findCollectionByName(config.zotero.inboxCollectionName);
   if (!inbox) {
     return { inbox: null, papers: [] };
   }
 
-  const items = await zoteroFetch(
-    `/collections/${inbox.key}/items/top?include=data&limit=100&sort=dateAdded&direction=desc`
-  );
-
+  const result = await getCollectionPapers(inbox);
   return {
-    inbox: { key: inbox.key, name: inbox.data.name, version: inbox.version },
-    papers: items
-      .filter((item) => item.data?.itemType !== "attachment")
-      .map(itemToPaper)
+    inbox: result.collection,
+    papers: result.papers
   };
 }
 

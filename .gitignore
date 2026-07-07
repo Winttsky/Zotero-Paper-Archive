@@ -9,3 +9,4 @@ data/notes/*
 data/metadata/items/*
 !data/metadata/items/.gitkeep
 data/metadata/archive-log.jsonl
+data/metadata/local-pdfs.json

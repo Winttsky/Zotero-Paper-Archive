@@ -18,7 +18,12 @@ async function request(path, options = {}) {
 
 export const api = {
   health: () => request("/api/health"),
-  papers: () => request("/api/papers"),
+  papers: ({ domainKey } = {}) => {
+    const params = new URLSearchParams();
+    if (domainKey) params.set("domainKey", domainKey);
+    const query = params.toString();
+    return request(`/api/papers${query ? `?${query}` : ""}`);
+  },
   importPdf: async (file) => {
     const form = new FormData();
     form.append("pdf", file);
@@ -37,10 +42,20 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ paperKey })
     }),
+  analyzePaper: (paperKey) =>
+    request("/api/ai/analyze-paper", {
+      method: "POST",
+      body: JSON.stringify({ paperKey })
+    }),
   archive: (payload) =>
     request("/api/archive", {
       method: "POST",
       body: JSON.stringify(payload)
+    }),
+  openNote: (notePath) =>
+    request("/api/open-note", {
+      method: "POST",
+      body: JSON.stringify({ notePath })
     })
 };
 

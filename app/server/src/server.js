@@ -2,18 +2,22 @@
 import cors from "cors";
 import { config } from "./config.js";
 import {
+  getCollectionPapers,
   getDomainCollections,
   getInboxPapers,
   getPaper,
   updatePaperArchive
 } from "./zotero.js";
-import { suggestDomains } from "./deepseek.js";
+import { generatePaperAnalysisNote, suggestDomains } from "./deepseek.js";
+import { preparePaperAnalysisInput } from "./paperAnalysis.js";
 import {
+  attachArchiveMetadata,
   copyPdfIfAvailable,
   saveArchiveMetadata,
   saveReadingNote
 } from "./archive.js";
 import { importPdfToZotero, uploadPdfMiddleware } from "./importPdf.js";
+import { openNoteInVSCode } from "./vscode.js";
 
 const app = express();
 
@@ -56,12 +60,35 @@ app.get(
 
 app.get(
   "/api/papers",
-  asyncRoute(async (_req, res) => {
-    const [papers, domains] = await Promise.all([
-      getInboxPapers(),
-      getDomainCollections()
-    ]);
-    res.json({ ...papers, domains: domains.domains });
+  asyncRoute(async (req, res) => {
+    const domainKey = String(req.query.domainKey || "").trim();
+    const domains = await getDomainCollections();
+
+    if (domainKey) {
+      const domain = domains.domains.find((entry) => entry.key === domainKey);
+      if (!domain) {
+        res.status(404).json({ error: "Domain collection not found." });
+        return;
+      }
+
+      const collectionPapers = await getCollectionPapers(domain);
+      res.json({
+        ...collectionPapers,
+        inbox: null,
+        papers: await attachArchiveMetadata(collectionPapers.papers),
+        domains: domains.domains,
+        view: { type: "domain", domain }
+      });
+      return;
+    }
+
+    const inboxPapers = await getInboxPapers();
+    res.json({
+      ...inboxPapers,
+      papers: await attachArchiveMetadata(inboxPapers.papers),
+      domains: domains.domains,
+      view: { type: "inbox" }
+    });
   })
 );
 
@@ -81,6 +108,30 @@ app.post(
       getDomainCollections()
     ]);
     res.json(await suggestDomains({ paper, domains: domains.domains }));
+  })
+);
+
+
+app.post(
+  "/api/ai/analyze-paper",
+  asyncRoute(async (req, res) => {
+    const { paperKey, maxFigures } = req.body;
+    if (!paperKey) {
+      res.status(400).json({ error: "paperKey is required." });
+      return;
+    }
+
+    const paper = await getPaper(paperKey);
+    const prepared = await preparePaperAnalysisInput({ paper, maxFigures });
+    const generated = await generatePaperAnalysisNote({ analysisInput: prepared.input });
+
+    res.json({
+      ok: true,
+      markdown: generated.markdown,
+      assets: prepared.assets,
+      warnings: [...prepared.warnings, ...generated.warnings],
+      textStats: prepared.textStats
+    });
   })
 );
 
@@ -125,6 +176,15 @@ app.post(
     });
 
     res.json({ ok: true, notePath, pdf, metadata, paper: after });
+  })
+);
+
+app.post(
+  "/api/open-note",
+  asyncRoute(async (req, res) => {
+    const { notePath } = req.body;
+    const result = await openNoteInVSCode(notePath);
+    res.json({ ok: true, ...result });
   })
 );
 

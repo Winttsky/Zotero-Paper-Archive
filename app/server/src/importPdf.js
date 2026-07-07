@@ -6,6 +6,7 @@ import { config } from "./config.js";
 import { ensureDir, safeFilePart } from "./utils.js";
 import { inferPdfMetadata } from "./metadata.js";
 import { createItems, findCollectionByName, getPaper, uploadAttachmentFile } from "./zotero.js";
+import { recordLocalPdf } from "./localPdfIndex.js";
 
 export const uploadPdfMiddleware = multer({
   storage: multer.memoryStorage(),
@@ -116,6 +117,8 @@ export async function importPdfToZotero(file) {
     md5,
     mtime: Date.now()
   });
+
+  await recordLocalPdf({ paperKey: parentKey, pdfPath: savedPath, source: "web-import" });
 
   const paper = await getPaper(parentKey);
   return {

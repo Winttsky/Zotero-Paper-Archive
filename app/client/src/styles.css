@@ -81,7 +81,7 @@ button:disabled {
   border-right: 1px solid #d7dde6;
   background: #ffffff;
   display: grid;
-  grid-template-rows: auto auto auto 1fr;
+  grid-template-rows: auto auto auto auto 1fr;
   gap: 12px;
   padding: 16px;
 }
@@ -272,9 +272,15 @@ label,
   flex-wrap: wrap;
 }
 
-.domainSelect {
+.domainSelect,
+.scopeSelect {
   display: grid;
   gap: 6px;
+}
+
+.scopeSelect select {
+  width: 100%;
+  min-width: 0;
 }
 
 select {
@@ -311,6 +317,24 @@ select {
 .noteTitle {
   padding: 12px;
   border-bottom: 1px solid #e2e8f0;
+  justify-content: space-between;
+}
+
+.noteTitleLabel,
+.noteOpenButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.noteTitleLabel {
+  min-width: 0;
+}
+
+.noteOpenButton {
+  flex: 0 0 auto;
+  min-height: 32px;
+  padding: 0 10px;
 }
 
 textarea {
@@ -348,7 +372,25 @@ textarea {
   padding: 12px;
   display: flex;
   align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.resultText {
+  min-width: 0;
+  display: flex;
+  align-items: center;
   gap: 8px;
+  overflow-wrap: anywhere;
+}
+
+.result button {
+  flex: 0 0 auto;
+  min-height: 34px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 10px;
 }
 
 .result.success {
@@ -416,4 +458,5 @@ textarea {
 .dropZone input {
   display: none;
 }
+
 

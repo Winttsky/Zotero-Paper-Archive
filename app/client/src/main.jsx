@@ -14,7 +14,17 @@ import { api } from "./api.js";
 import { buildNote } from "./noteTemplate.js";
 import "./styles.css";
 
-function PaperList({ papers, selectedKey, onSelect, onImportPdf, importing }) {
+function PaperList({
+  papers,
+  domains,
+  selectedKey,
+  onSelect,
+  onImportPdf,
+  importing,
+  scopeValue,
+  scopeLabel,
+  onScopeChange
+}) {
   const [query, setQuery] = useState("");
   const [dragging, setDragging] = useState(false);
   const filtered = useMemo(() => {
@@ -64,15 +74,32 @@ function PaperList({ papers, selectedKey, onSelect, onImportPdf, importing }) {
           }}
         />
       </label>
+      <label className="scopeSelect">
+        <span>{"\u8bba\u6587\u8303\u56f4"}</span>
+        <select value={scopeValue} onChange={(event) => onScopeChange(event.target.value)}>
+          <option value="inbox">{"\u5f85\u8bfb\u8bba\u6587"}</option>
+          {domains.map((domain) => (
+            <option key={domain.key} value={domain.key}>
+              {domain.name}
+            </option>
+          ))}
+        </select>
+      </label>
       <div className="searchBox">
         <Search size={16} />
         <input
           value={query}
           onChange={(event) => setQuery(event.target.value)}
-          placeholder="搜索待读论文"
+          placeholder={
+            scopeValue === "inbox"
+              ? "\u641c\u7d22\u5f85\u8bfb\u8bba\u6587"
+              : "\u641c\u7d22\u8be5\u9886\u57df\u8bba\u6587"
+          }
         />
       </div>
-      <div className="paperCount">{filtered.length} 篇</div>
+      <div className="paperCount">
+        {scopeLabel}{" \u00b7 "}{filtered.length}{" \u7bc7"}
+      </div>
       <div className="paperList">
         {filtered.map((paper) => (
           <button
@@ -108,6 +135,7 @@ function App() {
   const [papers, setPapers] = useState([]);
   const [domains, setDomains] = useState([]);
   const [inbox, setInbox] = useState(null);
+  const [paperScope, setPaperScope] = useState("inbox");
   const [selected, setSelected] = useState(null);
   const [domainKey, setDomainKey] = useState("");
   const [note, setNote] = useState("");
@@ -115,19 +143,33 @@ function App() {
   const [status, setStatus] = useState("正在连接后端...");
   const [busy, setBusy] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [analyzing, setAnalyzing] = useState(false);
   const [result, setResult] = useState(null);
+  const [savedNotePath, setSavedNotePath] = useState("");
+  const [openingNote, setOpeningNote] = useState(false);
 
-  async function load() {
+  async function load({ scopeValue = paperScope, keepResult = false } = {}) {
     setBusy(true);
-    setResult(null);
+    if (!keepResult) setResult(null);
     try {
-      const payload = await api.papers();
-      setPapers(payload.papers || []);
+      const domainKeyForQuery = scopeValue === "inbox" ? "" : scopeValue;
+      const payload = await api.papers({ domainKey: domainKeyForQuery });
+      const nextPapers = payload.papers || [];
+      setPapers(nextPapers);
       setDomains(payload.domains || []);
       setInbox(payload.inbox || null);
-      const first = payload.papers?.[0] || null;
-      setSelected((current) => current || first);
-      setStatus(payload.inbox ? "已连接 Zotero" : "未找到待读集合");
+      setSelected((current) => {
+        if (!nextPapers.length) return null;
+        if (!current) return nextPapers[0];
+        return nextPapers.find((paper) => paper.key === current.key) || nextPapers[0];
+      });
+      setStatus(
+        payload.view?.type === "domain"
+          ? `\u6b63\u5728\u67e5\u770b\u9886\u57df\uff1a${payload.view.domain.name}`
+          : payload.inbox
+            ? "\u5df2\u8fde\u63a5 Zotero"
+            : "\u672a\u627e\u5230\u5f85\u8bfb\u96c6\u5408"
+      );
     } catch (error) {
       setStatus(error.message);
     } finally {
@@ -136,15 +178,35 @@ function App() {
   }
 
   useEffect(() => {
-    load();
+    load({ scopeValue: "inbox" });
   }, []);
 
-  useEffect(() => {
-    if (!selected) return;
-    const domain = domains.find((entry) => entry.key === domainKey);
-    setNote(buildNote(selected, domain?.name || ""));
-    setSuggestions([]);
+  function selectPaper(paper) {
+    setSelected(paper);
     setResult(null);
+    setSavedNotePath(paper?.notePath || "");
+  }
+
+  function changePaperScope(nextScope) {
+    setPaperScope(nextScope);
+    if (nextScope !== "inbox") setDomainKey(nextScope);
+    load({ scopeValue: nextScope });
+  }
+
+  useEffect(() => {
+    if (!selected) {
+      setNote("");
+      setSavedNotePath("");
+      return;
+    }
+    const selectedDomainName =
+      selected.archivedDomainName ||
+      domains.find((entry) => entry.key === domainKey)?.name ||
+      domains.find((entry) => entry.key === paperScope)?.name ||
+      "";
+    setNote(buildNote(selected, selectedDomainName));
+    setSuggestions([]);
+    setSavedNotePath(selected.notePath || "");
   }, [selected?.key]);
 
   useEffect(() => {
@@ -171,6 +233,30 @@ function App() {
       setBusy(false);
     }
   }
+  async function analyzePaper() {
+    if (!selected) return;
+    setAnalyzing(true);
+    setResult(null);
+    try {
+      const payload = await api.analyzePaper(selected.key);
+      setNote(payload.markdown || "");
+      const warnings = payload.warnings?.length
+        ? `\uff1b\u8b66\u544a\uff1a${payload.warnings.join("\uff1b")}`
+        : "";
+      const assetText = payload.assets?.length
+        ? `\uff1b\u56fe\u8868\u7d20\u6750\uff1a${payload.assets.length} \u4e2a`
+        : "";
+      setResult({
+        type: "success",
+        message: `\u5df2\u751f\u6210 ECG-depression \u5168\u6587\u5f52\u7eb3${assetText}${warnings}`
+      });
+    } catch (error) {
+      setResult({ type: "error", message: error.message });
+    } finally {
+      setAnalyzing(false);
+    }
+  }
+
   async function importPdf(file) {
     setImporting(true);
     setResult(null);
@@ -180,6 +266,7 @@ function App() {
         type: "success",
         message: `已导入 Zotero：${payload.paper?.displayTitle || payload.paper?.title || file.name}`
       });
+      setPaperScope("inbox");
       const refreshed = await api.papers();
       setPapers(refreshed.papers || []);
       setDomains(refreshed.domains || []);
@@ -190,6 +277,19 @@ function App() {
       setResult({ type: "error", message: error.message });
     } finally {
       setImporting(false);
+    }
+  }
+
+  async function openSavedNote() {
+    if (!savedNotePath) return;
+    setOpeningNote(true);
+    try {
+      await api.openNote(savedNotePath);
+      setResult({ type: "success", message: `\u5df2\u5728 VSCode \u4e2d\u6253\u5f00\uff1a${savedNotePath}` });
+    } catch (error) {
+      setResult({ type: "error", message: error.message });
+    } finally {
+      setOpeningNote(false);
     }
   }
 
@@ -211,15 +311,22 @@ function App() {
         domain,
         noteBody: note
       });
-      setResult({
-        type: "success",
-        message: `已归档。笔记：${payload.notePath}${
-          payload.pdf?.copied ? `；PDF：${payload.pdf.targetPath}` : "；PDF 未复制"
-        }`
-      });
-      setSelected(null);
-      setDomainKey("");
-      await load();
+      const message = `\u5df2\u5f52\u6863\u3002\u7b14\u8bb0\uff1a${payload.notePath}${
+        payload.pdf?.copied ? `\uff1bPDF\uff1a${payload.pdf.targetPath}` : "\uff1bPDF \u672a\u590d\u5236"
+      }`;
+      const archivedPaper = {
+        ...(payload.paper || selected),
+        notePath: payload.notePath || "",
+        archivedDomainName: domain.name
+      };
+      setDomainKey(domain.key);
+      setPaperScope(domain.key);
+      await load({ scopeValue: domain.key, keepResult: true });
+      setSelected((current) =>
+        current?.key === archivedPaper.key ? { ...current, ...archivedPaper } : archivedPaper
+      );
+      setSavedNotePath(payload.notePath || "");
+      setResult({ type: "success", message });
     } catch (error) {
       setResult({ type: "error", message: error.message });
     } finally {
@@ -228,6 +335,9 @@ function App() {
   }
 
   const chosenDomain = domains.find((domain) => domain.key === domainKey);
+  const scopeDomain = domains.find((domain) => domain.key === paperScope);
+  const paperScopeLabel =
+    paperScope === "inbox" ? "\u5f85\u8bfb\u8bba\u6587" : scopeDomain?.name || "\u9886\u57df\u8bba\u6587";
 
   return (
     <main className="appShell">
@@ -236,7 +346,12 @@ function App() {
           <h1>Zotero Paper Archive</h1>
           <p>{status}</p>
         </div>
-        <button className="iconButton" onClick={load} disabled={busy} title="刷新">
+        <button
+          className="iconButton"
+          onClick={() => load({ scopeValue: paperScope })}
+          disabled={busy}
+          title={"\u5237\u65b0"}
+        >
           <RefreshCw size={18} />
         </button>
       </header>
@@ -244,10 +359,14 @@ function App() {
       <section className="workspace">
         <PaperList
           papers={papers}
+          domains={domains}
           selectedKey={selected?.key}
-          onSelect={setSelected}
+          onSelect={selectPaper}
           onImportPdf={importPdf}
           importing={importing}
+          scopeValue={paperScope}
+          scopeLabel={paperScopeLabel}
+          onScopeChange={changePaperScope}
         />
 
         <section className="detailPane">
@@ -306,6 +425,10 @@ function App() {
                   <Brain size={16} />
                   AI 建议领域
                 </button>
+                <button onClick={analyzePaper} disabled={busy || analyzing}>
+                  <Brain size={16} />
+                  {analyzing ? "\u6b63\u5728\u5f52\u7eb3\u5168\u6587..." : "AI \u5f52\u7eb3\u5168\u6587"}
+                </button>
               </div>
 
               {suggestions.length > 0 && (
@@ -332,8 +455,16 @@ function App() {
 
               <div className="notePanel">
                 <div className="noteTitle">
-                  <FileText size={16} />
-                  <span>Markdown 精读笔记</span>
+                  <div className="noteTitleLabel">
+                    <FileText size={16} />
+                    <span>Markdown {"\u7cbe\u8bfb\u7b14\u8bb0"}</span>
+                  </div>
+                  {savedNotePath && (
+                    <button className="noteOpenButton" onClick={openSavedNote} disabled={openingNote}>
+                      <FileText size={16} />
+                      {openingNote ? "\u6b63\u5728\u6253\u5f00..." : "\u5728 VSCode \u91cc\u6253\u5f00"}
+                    </button>
+                  )}
                 </div>
                 <textarea value={note} onChange={(event) => setNote(event.target.value)} />
               </div>
@@ -359,8 +490,10 @@ function App() {
 
               {result && (
                 <div className={`result ${result.type}`}>
-                  {result.type === "success" ? <Check size={16} /> : null}
-                  {result.message}
+                  <div className="resultText">
+                    {result.type === "success" ? <Check size={16} /> : null}
+                    <span>{result.message}</span>
+                  </div>
                 </div>
               )}
             </>

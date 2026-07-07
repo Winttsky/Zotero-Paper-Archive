@@ -43,7 +43,8 @@ export const config = {
     notesRoot: fromRoot(process.env.NOTES_ROOT, "data/notes"),
     papersRoot: fromRoot(process.env.PAPERS_ROOT, "data/papers"),
     metadataRoot: fromRoot(process.env.METADATA_ROOT, "data/metadata"),
-    template: path.resolve(projectRoot, "config/templates/reading-note.md")
+    template: path.resolve(projectRoot, "config/templates/reading-note.md"),
+    deepseekPaperAnalysisSkill: path.resolve(projectRoot, "config/skills/deepseek-paper-analysis.md")
   },
   assertZoteroWriteReady() {
     required("ZOTERO_USER_ID");
